@@ -1,0 +1,14 @@
+[workspace]
+channels = ["conda-forge"]
+name = "kernel"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = ">=3.13.5,<3.14"
+pyglfw = ">=2.9.0,<3"
+
+[pypi-dependencies]
+raylib = ">=5.5.0.2, <6"
