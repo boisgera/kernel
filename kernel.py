@@ -1,17 +1,8 @@
 import ast
 import os
+import sys
 
-def count_open_files():
-    fd_dir = '/proc/self/fd'
-    try:
-        # List all entries in /proc/self/fd — each is an open file descriptor
-        fds = os.listdir(fd_dir)
-        return fds
-    except Exception as e:
-        print(f"Error reading {fd_dir}: {e}")
-        return None
-
-def main():
+def main(verbose=False):
     try:
         input = os.mkfifo("input")
     except FileExistsError:
@@ -22,13 +13,14 @@ def main():
         pass
 
     while True:
-        #print(f"Opened files: {count_open_files()}")
         with open("input", "r") as input_fifo:
             data = input_fifo.read()
         if data == "":
-            print("EOF")
+            if verbose:
+                print("EOF")
             continue
-        print(f"<- {data}")
+        if verbose:
+            print(f"<- {data}")
         try:
             ast.parse(data, mode="eval")
             out = eval(data, globals())
@@ -42,8 +34,9 @@ def main():
         with open("output", "w") as output_fifo:
             output_fifo.write(repr(out))
             output_fifo.flush()
-        print(f"-> {repr(out)}")
+        if verbose:
+            print(f"-> {repr(out)}")
 
 
 if __name__ == "__main__":
-    main()
+    main(verbose = "-v" in sys.argv)

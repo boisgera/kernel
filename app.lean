@@ -125,6 +125,7 @@ def WHITE := (255, 255, 255, 255)
 def VIOLET := (135, 60, 190, 255)
 def DARK_GREEN := (0, 109, 87, 255)
 def LIGHT_GREY := (211, 211, 211, 255)
+def STRAWBERRY := (215, 44, 22, 255)
 
 abbrev Point2 := Nat × Nat
 abbrev Vector2 := Int × Int
@@ -143,31 +144,29 @@ def WIDTH := 32
 def HEIGHT := 18
 def SCALE := 25 -- 800 x 450 size (16:9 aspect ratio)
 
-
 def draw_grid : IO Unit := do
     for i in [0:HEIGHT] do
         for j in [0:WIDTH] do
             if (i + j) % 2 == 0 then
                 draw_rectangle (j * SCALE) (i * SCALE) SCALE SCALE LIGHT_GREY
 
--- Something that may block in here?
+def draw_fruit (fruit : Point2) : IO Unit := do
+    let (x, y) := fruit
+    draw_rectangle (x * SCALE) (y * SCALE) SCALE SCALE STRAWBERRY
+
 def draw (state : GameState) : IO Unit := do
-    -- hangs somewhere below AFAICT
-    -- let t <- IO.monoMsNow
     clear_background WHITE
-    draw_grid -- HERE MOFO!
+    draw_grid
     draw_text "Hello Snake!" 190 200 20 VIOLET
+    draw_fruit state.fruit
     for point in state.snake_geometry do
         let (x, y) := point
         draw_rectangle (x * SCALE) (y * SCALE) SCALE SCALE DARK_GREEN
-    -- IO.println s!"{5}"
-    -- let t' <- IO.monoMsNow
-    -- IO.println s!"{6}"
-    -- IO.println s!"draw took {t' - t} ms"
 
 
-def move (state : GameState) : GameState :=
-    let (dx, dy) := state.snake_direction
+
+def forward (state : GameState) : GameState :=
+        let (dx, dy) := state.snake_direction
     let snake_geometry := state.snake_geometry
     let head := match state.snake_geometry.head? with
       | none => panic! "Snake geometry is empty"
@@ -176,8 +175,23 @@ def move (state : GameState) : GameState :=
         ((Int.ofNat head.1) + dx).toNat,
         ((Int.ofNat head.2) + dy).toNat,
     )
-    let new_snake_geometry := new_head :: snake_geometry.take (snake_geometry.length - 1)
+    let new_snake_geometry := new_head :: snake_geometry
     { state with snake_geometry := new_snake_geometry }
+
+def trim (state : GameState) : GameState :=
+    let snake_geometry := state.snake_geometry
+    let new_snake_geometry := snake_geometry.take (snake_geometry.length - 1)
+    { state with snake_geometry := new_snake_geometry }
+
+def move (state : GameState) : GameState := Id.run do
+    let mut state' <- forward state
+    let mut head : Point2 := (0, 0)
+    match state'.snake_geometry.head? with
+      | none => pure ()
+      | some head_ => head <- head_
+    if not (head == state'.fruit) then
+        state' := trim state'
+    state'
 
 def main : IO Unit := do
     import_ "pyray"
@@ -190,37 +204,19 @@ def main : IO Unit := do
         fruit := (7, 7),
     }
 
-    IO.println s!"{<- IO.Process.getPID}"
-
-
     while not (<- window_should_close) do
-
-        -- show_opened_fd
-        -- IO.println s!"Timestamp: {<- IO.monoMsNow}"
-        -- IO.sleep 3000
-
-
-        -- IO.println s!"{<- IO.monoMsNow}"
         if (<- is_key_pressed KEY_UP) then do
-            IO.println "Up key pressed"
             state := {state with snake_direction := UP}
         else if (<- is_key_pressed KEY_DOWN) then do
-            IO.println "Down key pressed"
             state := {state with snake_direction := DOWN}
         else if (<- is_key_pressed KEY_LEFT) then do
-            IO.println "Left key pressed"
             state := {state with snake_direction := LEFT}
         else if (<- is_key_pressed KEY_RIGHT) then do
-            IO.println "Right key pressed"
             state := {state with snake_direction := RIGHT}
 
-        -- IO.println "mov state"
         state := move state
-        -- IO.println "begin draw"
         begin_drawing
-        -- IO.println "draw state"
         draw state
-        -- IO.println "end draw"
         end_drawing
 
     close_window
