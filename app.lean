@@ -1,53 +1,226 @@
+import Init.System.IO
 
-def eval (code: String) : IO String := do
+-- structure K where
+--   input : IO.FS.Handle
+--   output : IO.FS.Handle
+
+-- def K.eval (k : K) (code: String) : IO String := do
+--   IO.println s!"Evaluating code: {code}"
+--   k.input.putStr code
+--   let mut data : String := ""
+--   repeat
+--     data <- k.output.readToEnd
+--     if data != "" then
+--         break
+--   return data
+
+-- def K.exec (k : K) (code: String) : IO Unit := do
+--   IO.println s!"Executing code: {code}"
+--   k.input.putStr code
+--   let mut data : String := ""
+--   repeat
+--     data <- k.output.readToEnd
+--     if data != "" then
+--         break
+--   -- TODO: check that data is "None"
+--   return ()
+
+-- def k : IO K := do
+--   IO.println "k"
+--   let input_handle <- IO.FS.Handle.mk "input" IO.FS.Mode.write
+--   IO.println "kk"
+--   let output_handle <- IO.FS.Handle.mk "output" IO.FS.Mode.read -- Blocks :(
+--   IO.println "kkk"
+--   return K.mk
+--     input_handle
+--     output_handle
+
+def replaceNewlines (s : String) : String :=
+  s.map (fun c => if c == '\n' then ' ' else c)
+
+def show_opened_fd : IO Unit := do
+  let cmd := "ls /proc/self/fd"
+  let process ← IO.Process.spawn {
+    cmd := "/bin/sh",
+    args := #["-c", cmd],
+    stdout := IO.Process.Stdio.piped
+  }
+  let output ← process.stdout.readToEnd
+  IO.println s!"Files opened: {replaceNewlines output.trim}"
+
+def eval (code : String) : IO String := do
     IO.FS.writeFile "input" code
-    return (<- IO.FS.readFile "output")
+    IO.FS.readFile "output"
 
-def exec (code: String) : IO Unit := do
-    IO.FS.writeFile "input" code
-    let _ <- IO.FS.readFile "output"
-    return ()
+def exec (code : String) : IO Unit := do
+    let data <- eval code
+    if data != "None" then
+        panic! s!"Expected 'None' but got: {data}"
 
-def import_ (module : String) : IO Unit :=
+def import_ (module : String) : IO Unit := do
+    -- IO.println "-"
+    -- IO.println "--"
     exec s!"from {module} import *"
+    -- IO.println "---"
 
 def init_window (width: Nat) (height: Nat) (title : String) : IO Unit := do
-    let code := s!"init_window({width}, {height}, \"{title}\")"
-    exec code
+    exec s!"init_window({width}, {height}, \"{title}\")"
 
 def window_should_close : IO Bool := do
     let status <- eval "window_should_close()"
     return status == "True"
 
-def set_target_fps (fps : Nat) : IO Unit :=
+def close_window : IO Unit := do
+    exec "close_window()"
+
+def set_target_fps (fps : Nat) : IO Unit := do
     exec s!"set_target_fps({fps})"
 
-def begin_drawing : IO Unit := exec "begin_drawing()"
+def begin_drawing : IO Unit := do
+    exec "begin_drawing()"
 
-def end_drawing : IO Unit := exec "end_drawing()"
+def end_drawing : IO Unit := do
+    exec "end_drawing()"
 
-abbrev Color := List Nat
+abbrev Color := Nat × Nat × Nat × Nat
 
-def clear_background (color : Color) : IO Unit :=
-    exec s!"clear_background({color})"
+def Color.to_string (color : Color) : String :=
+    let (r, g, b, a) := color
+    s!"({r}, {g}, {b}, {a})"
+
+def clear_background (color : Color) : IO Unit := do
+    exec s!"clear_background({color.to_string})"
 
 
-def draw_text (text : String) (x : Nat) (y : Nat) (fontSize : Nat) (color : Color) : IO Unit :=
-    exec s!"draw_text(\"{text}\", {x}, {y}, {fontSize}, {color})"
+def draw_text (text : String) (x y : Nat) (fontSize : Nat) (color : Color) : IO Unit := do
+    exec s!"draw_text(\"{text}\", {x}, {y}, {fontSize}, {color.to_string})"
 
-def close_window : IO Unit := exec "close_window()"
+def draw_rectangle (x y : Nat) (width height : Nat) (color : Color) : IO Unit := do
+    exec s!"draw_rectangle({x}, {y}, {width}, {height}, {color.to_string})"
 
-def WHITE := [255, 255, 255, 255]
 
-def VIOLET := [135, 60, 190, 255]
+def KEY_UP := 265
+def KEY_DOWN := 264
+def KEY_LEFT := 263
+def KEY_RIGHT := 262
+
+def is_key_pressed (key : Nat) : IO Bool := do
+    let status <- eval s!"is_key_pressed({key})"
+    return status == "True"
+
+def is_key_down (key : Nat) : IO Bool := do
+    let status <- eval s!"is_key_down({key})"
+    return status == "True"
+
+def is_key_released (key : Nat) : IO Bool := do
+    let status <- eval s!"is_key_released({key})"
+    return status == "True"
+
+def is_key_up (key : Nat) : IO Bool := do
+    let status <- eval s!"is_key_up({key})"
+    return status == "True"
+
+def BLACK := (0, 0, 0, 255)
+def WHITE := (255, 255, 255, 255)
+def VIOLET := (135, 60, 190, 255)
+def DARK_GREEN := (0, 109, 87, 255)
+def LIGHT_GREY := (211, 211, 211, 255)
+
+abbrev Point2 := Nat × Nat
+abbrev Vector2 := Int × Int
+
+def UP : Vector2 := (0, -1)
+def DOWN : Vector2 := (0, 1)
+def LEFT : Vector2 := (-1, 0)
+def RIGHT : Vector2 := (1, 0)
+
+structure GameState where
+    snake_direction : Vector2
+    snake_geometry : List Point2
+    fruit : Point2
+
+def WIDTH := 32
+def HEIGHT := 18
+def SCALE := 25 -- 800 x 450 size (16:9 aspect ratio)
+
+
+def draw_grid : IO Unit := do
+    for i in [0:HEIGHT] do
+        for j in [0:WIDTH] do
+            if (i + j) % 2 == 0 then
+                draw_rectangle (j * SCALE) (i * SCALE) SCALE SCALE LIGHT_GREY
+
+-- Something that may block in here?
+def draw (state : GameState) : IO Unit := do
+    -- hangs somewhere below AFAICT
+    -- let t <- IO.monoMsNow
+    clear_background WHITE
+    draw_grid -- HERE MOFO!
+    draw_text "Hello Snake!" 190 200 20 VIOLET
+    for point in state.snake_geometry do
+        let (x, y) := point
+        draw_rectangle (x * SCALE) (y * SCALE) SCALE SCALE DARK_GREEN
+    -- IO.println s!"{5}"
+    -- let t' <- IO.monoMsNow
+    -- IO.println s!"{6}"
+    -- IO.println s!"draw took {t' - t} ms"
+
+
+def move (state : GameState) : GameState :=
+    let (dx, dy) := state.snake_direction
+    let snake_geometry := state.snake_geometry
+    let head := match state.snake_geometry.head? with
+      | none => panic! "Snake geometry is empty"
+      | some head => head
+    let new_head : Point2 := (
+        ((Int.ofNat head.1) + dx).toNat,
+        ((Int.ofNat head.2) + dy).toNat,
+    )
+    let new_snake_geometry := new_head :: snake_geometry.take (snake_geometry.length - 1)
+    { state with snake_geometry := new_snake_geometry }
 
 def main : IO Unit := do
     import_ "pyray"
-    init_window 800 450 "Hello"
-    set_target_fps 60
+    init_window (WIDTH * SCALE) (HEIGHT * SCALE) "Snake Game"
+    set_target_fps 10
+
+    let mut state : GameState := {
+        snake_direction : Int × Int := (1, 0),
+        snake_geometry := [(15, 12), (16, 12), (17, 12)],
+        fruit := (7, 7),
+    }
+
+    IO.println s!"{<- IO.Process.getPID}"
+
+
     while not (<- window_should_close) do
+
+        -- show_opened_fd
+        -- IO.println s!"Timestamp: {<- IO.monoMsNow}"
+        -- IO.sleep 3000
+
+
+        -- IO.println s!"{<- IO.monoMsNow}"
+        if (<- is_key_pressed KEY_UP) then do
+            IO.println "Up key pressed"
+            state := {state with snake_direction := UP}
+        else if (<- is_key_pressed KEY_DOWN) then do
+            IO.println "Down key pressed"
+            state := {state with snake_direction := DOWN}
+        else if (<- is_key_pressed KEY_LEFT) then do
+            IO.println "Left key pressed"
+            state := {state with snake_direction := LEFT}
+        else if (<- is_key_pressed KEY_RIGHT) then do
+            IO.println "Right key pressed"
+            state := {state with snake_direction := RIGHT}
+
+        -- IO.println "mov state"
+        state := move state
+        -- IO.println "begin draw"
         begin_drawing
-        clear_background WHITE
-        draw_text "Hello world" 190 200 20 VIOLET
+        -- IO.println "draw state"
+        draw state
+        -- IO.println "end draw"
         end_drawing
+
     close_window
